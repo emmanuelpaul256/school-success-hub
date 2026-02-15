@@ -69,12 +69,10 @@ const Notifications = () => {
             Stay updated on important activities and reminders
           </p>
         </div>
-        {unreadCount > 0 && (
-          <Button variant="outline" onClick={markAllAsRead}>
-            <CheckCircle2 className="mr-2 h-4 w-4" />
-            Mark all as read
-          </Button>
-        )}
+        <Button variant="outline" onClick={markAllAsRead} disabled={unreadCount === 0}>
+          <CheckCircle2 className="mr-2 h-4 w-4" />
+          {unreadCount > 0 ? 'Mark all as read' : 'All read'}
+        </Button>
       </div>
 
       {/* Summary */}
