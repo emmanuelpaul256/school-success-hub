@@ -32,6 +32,7 @@ import { formatDistanceToNow } from 'date-fns';
 import { LeadStatus } from '@/types';
 import { getStatusLabel, getStatusVariant } from '@/lib/leadUtils';
 import { Link } from 'react-router-dom';
+import AddLeadDialog from '@/components/leads/AddLeadDialog';
 
 const statusOptions: LeadStatus[] = ['new', 'contacted', 'demo_scheduled', 'negotiation', 'converted', 'lost'];
 
@@ -39,6 +40,7 @@ const Leads = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<LeadStatus | 'all'>('all');
   const [staffFilter, setStaffFilter] = useState<string>('all');
+  const [addLeadOpen, setAddLeadOpen] = useState(false);
 
   const filteredLeads = leads.filter(lead => {
     const matchesSearch = 
@@ -62,7 +64,7 @@ const Leads = () => {
             Manage and track your sales prospects
           </p>
         </div>
-        <Button>
+        <Button onClick={() => setAddLeadOpen(true)}>
           <Plus className="mr-2 h-4 w-4" />
           Add Lead
         </Button>
@@ -211,6 +213,7 @@ const Leads = () => {
       <div className="flex items-center justify-between text-sm text-muted-foreground">
         <p>Showing {filteredLeads.length} of {leads.length} leads</p>
       </div>
+      <AddLeadDialog open={addLeadOpen} onOpenChange={setAddLeadOpen} />
     </div>
   );
 };
