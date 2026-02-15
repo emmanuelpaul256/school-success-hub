@@ -142,7 +142,7 @@ const Notifications = () => {
                     <span className="text-xs text-muted-foreground">
                       {formatDistanceToNow(notification.timestamp, { addSuffix: true })}
                     </span>
-                    {!notification.read && (
+                    {!notification.read ? (
                       <Button
                         variant="ghost"
                         size="sm"
@@ -151,6 +151,11 @@ const Notifications = () => {
                       >
                         Mark as read
                       </Button>
+                    ) : (
+                      <span className="flex items-center gap-1 text-xs text-muted-foreground">
+                        <CheckCircle2 className="h-3 w-3" />
+                        Read
+                      </span>
                     )}
                     <Button variant="outline" size="sm" className="h-7 text-xs" asChild>
                       <Link to={notification.link}>View Details</Link>
