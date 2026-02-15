@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { demos, staff } from '@/data/mockData';
+import { ScheduleDemoDialog } from '@/components/demos/ScheduleDemoDialog';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -39,6 +40,7 @@ const Demos = () => {
   const [viewMode, setViewMode] = useState<ViewMode>('week');
   const [currentDate, setCurrentDate] = useState(new Date());
   const [selectedDemo, setSelectedDemo] = useState<typeof demos[0] | null>(null);
+  const [scheduleOpen, setScheduleOpen] = useState(false);
 
   const getDateRange = () => {
     if (viewMode === 'week') {
@@ -92,7 +94,7 @@ const Demos = () => {
             Manage and track all scheduled demos
           </p>
         </div>
-        <Button>
+        <Button onClick={() => setScheduleOpen(true)}>
           <Plus className="mr-2 h-4 w-4" />
           Schedule Demo
         </Button>
@@ -258,6 +260,7 @@ const Demos = () => {
           )}
         </SheetContent>
       </Sheet>
+      <ScheduleDemoDialog open={scheduleOpen} onOpenChange={setScheduleOpen} />
     </div>
   );
 };
