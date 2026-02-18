@@ -1,24 +1,39 @@
 import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Navigate } from 'react-router-dom';
 import { GraduationCap, Eye, EyeOff, ArrowRight, BookOpen, Users, BarChart3 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { useAuth } from '@/context/AuthContext';
 
 const Login = () => {
   const navigate = useNavigate();
+  const { login, isAuthenticated } = useAuth();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState('');
+
+  // Already logged in → go to dashboard
+  if (isAuthenticated) return <Navigate to="/" replace />;
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
+    setError('');
+    if (!email || !password) {
+      setError('Please enter your email and password.');
+      return;
+    }
     setIsLoading(true);
-    // Simulate login delay
-    await new Promise((r) => setTimeout(r, 1000));
-    setIsLoading(false);
-    navigate('/');
+    try {
+      await login(email, password);
+      navigate('/');
+    } catch {
+      setError('Invalid credentials. Please try again.');
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   const features = [
@@ -30,16 +45,15 @@ const Login = () => {
   return (
     <div className="min-h-screen flex">
       {/* Left panel - Branding */}
-      <div className="hidden lg:flex lg:w-1/2 flex-col justify-between p-12 relative overflow-hidden"
+      <div
+        className="hidden lg:flex lg:w-1/2 flex-col justify-between p-12 relative overflow-hidden"
         style={{ background: 'linear-gradient(135deg, hsl(222, 47%, 11%) 0%, hsl(221, 60%, 20%) 100%)' }}
       >
-        {/* Decorative blobs */}
         <div className="absolute top-0 right-0 w-96 h-96 rounded-full opacity-10"
           style={{ background: 'hsl(var(--primary))', transform: 'translate(30%, -30%)' }} />
         <div className="absolute bottom-0 left-0 w-72 h-72 rounded-full opacity-10"
           style={{ background: 'hsl(var(--info))', transform: 'translate(-30%, 30%)' }} />
 
-        {/* Logo */}
         <div className="flex items-center gap-3 relative z-10">
           <div className="flex h-10 w-10 items-center justify-center rounded-xl"
             style={{ background: 'hsl(var(--primary))' }}>
@@ -51,7 +65,6 @@ const Login = () => {
           </div>
         </div>
 
-        {/* Hero copy */}
         <div className="relative z-10 space-y-6">
           <h1 className="text-4xl font-bold text-white leading-tight">
             Grow your EdTech<br />
@@ -60,7 +73,6 @@ const Login = () => {
           <p style={{ color: 'hsl(210, 40%, 70%)' }} className="text-lg leading-relaxed max-w-sm">
             Your all-in-one platform to manage leads, schedule demos, and onboard schools at scale.
           </p>
-
           <div className="space-y-4 pt-4">
             {features.map(({ icon: Icon, label, desc }) => (
               <div key={label} className="flex items-start gap-4">
@@ -77,7 +89,6 @@ const Login = () => {
           </div>
         </div>
 
-        {/* Footer quote */}
         <p className="text-xs relative z-10" style={{ color: 'hsl(210, 40%, 50%)' }}>
           © 2026 EduConnect. Empowering schools worldwide.
         </p>
@@ -85,7 +96,6 @@ const Login = () => {
 
       {/* Right panel - Login form */}
       <div className="flex flex-1 flex-col items-center justify-center p-8 bg-background">
-        {/* Mobile logo */}
         <div className="flex lg:hidden items-center gap-3 mb-10">
           <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary">
             <GraduationCap className="h-6 w-6 text-primary-foreground" />
@@ -94,13 +104,11 @@ const Login = () => {
         </div>
 
         <div className="w-full max-w-sm space-y-8">
-          {/* Heading */}
           <div>
             <h2 className="text-2xl font-bold text-foreground">Welcome back</h2>
             <p className="text-muted-foreground mt-1 text-sm">Sign in to your account to continue</p>
           </div>
 
-          {/* Form */}
           <form onSubmit={handleLogin} className="space-y-5">
             <div className="space-y-2">
               <Label htmlFor="email">Email address</Label>
@@ -118,11 +126,7 @@ const Login = () => {
             <div className="space-y-2">
               <div className="flex items-center justify-between">
                 <Label htmlFor="password">Password</Label>
-                <button
-                  type="button"
-                  className="text-xs text-primary hover:underline"
-                  tabIndex={-1}
-                >
+                <button type="button" className="text-xs text-primary hover:underline" tabIndex={-1}>
                   Forgot password?
                 </button>
               </div>
@@ -148,11 +152,11 @@ const Login = () => {
               </div>
             </div>
 
-            <Button
-              type="submit"
-              className="w-full"
-              disabled={isLoading}
-            >
+            {error && (
+              <p className="text-sm text-destructive">{error}</p>
+            )}
+
+            <Button type="submit" className="w-full" disabled={isLoading}>
               {isLoading ? (
                 <span className="flex items-center gap-2">
                   <svg className="animate-spin h-4 w-4" viewBox="0 0 24 24" fill="none">
@@ -163,14 +167,12 @@ const Login = () => {
                 </span>
               ) : (
                 <span className="flex items-center gap-2">
-                  Sign in
-                  <ArrowRight className="h-4 w-4" />
+                  Sign in <ArrowRight className="h-4 w-4" />
                 </span>
               )}
             </Button>
           </form>
 
-          {/* Demo hint */}
           <div className="rounded-lg border border-dashed p-4 text-center bg-muted/30">
             <p className="text-xs text-muted-foreground">
               <span className="font-semibold text-foreground">Demo access</span> — Use any email & password to sign in
