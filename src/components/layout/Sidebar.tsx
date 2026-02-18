@@ -1,4 +1,4 @@
-import { Link, useLocation } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { cn } from '@/lib/utils';
 import {
   LayoutDashboard,
@@ -13,9 +13,9 @@ import {
   ChevronLeft,
   GraduationCap,
 } from 'lucide-react';
-import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
+import { useAuth } from '@/context/AuthContext';
 import { currentUser } from '@/data/mockData';
 
 interface NavItemProps {
@@ -50,6 +50,18 @@ interface SidebarProps {
 }
 
 export const Sidebar = ({ collapsed, onToggle }: SidebarProps) => {
+  const { logout, user } = useAuth();
+  const navigate = useNavigate();
+
+  const handleLogout = () => {
+    logout();
+    navigate('/login');
+  };
+
+  const displayName = user?.name || currentUser.name;
+  const displayEmail = user?.email || currentUser.email;
+  const initials = displayName.split(' ').map((n: string) => n[0]).join('').slice(0, 2).toUpperCase();
+
   const navItems = [
     { to: '/', icon: <LayoutDashboard className="h-5 w-5" />, label: 'Dashboard' },
     { to: '/leads', icon: <Users className="h-5 w-5" />, label: 'Leads' },
@@ -105,24 +117,36 @@ export const Sidebar = ({ collapsed, onToggle }: SidebarProps) => {
           label="Settings"
           collapsed={collapsed}
         />
-        
+
+        {/* Logout */}
+        <button
+          onClick={handleLogout}
+          className={cn(
+            'nav-item w-full text-left text-destructive hover:bg-destructive/10 hover:text-destructive',
+            collapsed && 'justify-center'
+          )}
+        >
+          <LogOut className="h-5 w-5 shrink-0" />
+          {!collapsed && <span className="font-medium">Log out</span>}
+        </button>
+
         {/* User profile */}
         <div className={cn(
-          'flex items-center rounded-lg p-2 mt-2',
+          'flex items-center rounded-lg p-2 mt-1',
           collapsed ? 'justify-center' : 'gap-3'
         )}>
           <Avatar className="h-8 w-8">
             <AvatarFallback className="bg-sidebar-primary text-sidebar-primary-foreground text-xs">
-              {currentUser.name.split(' ').map(n => n[0]).join('')}
+              {initials}
             </AvatarFallback>
           </Avatar>
           {!collapsed && (
             <div className="flex-1 min-w-0">
-              <p className="text-sm font-medium text-sidebar-accent-foreground truncate">
-                {currentUser.name}
+              <p className="text-sm font-medium text-sidebar-accent-foreground truncate capitalize">
+                {displayName}
               </p>
-              <p className="text-xs text-sidebar-muted truncate capitalize">
-                {currentUser.role}
+              <p className="text-xs text-sidebar-muted truncate">
+                {displayEmail}
               </p>
             </div>
           )}
