@@ -1,5 +1,6 @@
 import { useState } from 'react';
-import { activities, staff } from '@/data/mockData';
+import { useQuery } from '@tanstack/react-query';
+import { otherService, leadsService } from '@/services';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -20,6 +21,7 @@ import {
   CheckCircle,
   School,
   Filter,
+  Activity as ActivityIcon,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -30,6 +32,11 @@ const activityConfig = {
     label: 'Lead Added',
   },
   status_changed: {
+    icon: RefreshCw,
+    color: 'bg-primary/10 text-primary',
+    label: 'Status Changed',
+  },
+  status_change: {
     icon: RefreshCw,
     color: 'bg-primary/10 text-primary',
     label: 'Status Changed',
@@ -61,11 +68,35 @@ const Activity = () => {
   const [typeFilter, setTypeFilter] = useState<string>('all');
   const [staffFilter, setStaffFilter] = useState<string>('all');
 
+  const { data: activitiesResp, isLoading } = useQuery({
+    queryKey: ['activities'],
+    queryFn: async () => {
+      const res: any = await otherService.getActivities({ limit: 100 });
+      return res?.data?.activities ?? [];
+    },
+  });
+
+  const activities = (activitiesResp || []).map((a: any) => ({
+    ...a,
+    timestamp: typeof a.timestamp === 'string' ? new Date(a.timestamp) : a.timestamp,
+  }));
+
+  const { data: salesUsersResp } = useQuery({
+    queryKey: ['salesUsers'],
+    queryFn: async () => {
+      const res: any = await leadsService.getSalesUsers();
+      return res?.data?.users ?? [];
+    },
+    placeholderData: [],
+  });
+
+  const staffList = salesUsersResp ?? [];
+
   const sortedActivities = [...activities].sort(
     (a, b) => b.timestamp.getTime() - a.timestamp.getTime()
   );
 
-  const filteredActivities = sortedActivities.filter(activity => {
+  const filteredActivities = sortedActivities.filter((activity: any) => {
     const matchesSearch = activity.description.toLowerCase().includes(searchQuery.toLowerCase());
     const matchesType = typeFilter === 'all' || activity.type === typeFilter;
     const matchesStaff = staffFilter === 'all' || activity.staffName === staffFilter;
@@ -73,7 +104,7 @@ const Activity = () => {
   });
 
   // Group activities by date
-  const groupedActivities = filteredActivities.reduce((groups, activity) => {
+  const groupedActivities = filteredActivities.reduce((groups: any, activity: any) => {
     const date = format(activity.timestamp, 'yyyy-MM-dd');
     if (!groups[date]) {
       groups[date] = [];
@@ -125,9 +156,9 @@ const Activity = () => {
             </SelectTrigger>
             <SelectContent className="bg-card">
               <SelectItem value="all">All Staff</SelectItem>
-              {staff.map(s => (
-                <SelectItem key={s.id} value={s.name}>
-                  {s.name}
+              {staffList.map((s: any) => (
+                <SelectItem key={s.id} value={s.full_name || s.name}>
+                  {s.full_name || s.name}
                 </SelectItem>
               ))}
               <SelectItem value="System">System</SelectItem>
@@ -155,7 +186,11 @@ const Activity = () => {
                 </h3>
                 <div className="relative pl-6 border-l-2 border-border space-y-6">
                   {dayActivities.map((activity) => {
-                    const config = activityConfig[activity.type];
+                    const config = activityConfig[activity.type] || {
+                      icon: ActivityIcon,
+                      color: 'bg-muted text-muted-foreground',
+                      label: 'Activity',
+                    };
                     const Icon = config.icon;
 
                     return (

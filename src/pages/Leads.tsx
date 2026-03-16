@@ -1,8 +1,11 @@
 import { useState } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Search, Filter, Plus, Download, MoreHorizontal, Eye, Edit, ChevronDown } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
+import { useToast } from '@/hooks/use-toast';
+import { statusOptions } from '@/lib/constants';
 import {
   Table,
   TableBody,
@@ -27,32 +30,148 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { leads, staff } from '@/data/mockData';
+import { leadsService } from '@/services';
 import { formatDistanceToNow } from 'date-fns';
 import { LeadStatus } from '@/types';
 import { getStatusLabel, getStatusVariant } from '@/lib/leadUtils';
 import { Link } from 'react-router-dom';
 import AddLeadDialog from '@/components/leads/AddLeadDialog';
 
-const statusOptions: LeadStatus[] = ['new', 'contacted', 'demo_scheduled', 'negotiation', 'converted', 'lost'];
+// statusOptions moved to shared constants
 
 const Leads = () => {
+  const { toast } = useToast();
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<LeadStatus | 'all'>('all');
   const [staffFilter, setStaffFilter] = useState<string>('all');
   const [addLeadOpen, setAddLeadOpen] = useState(false);
+  const [page, setPage] = useState(0);
+  const pageSize = 10;
 
-  const filteredLeads = leads.filter(lead => {
-    const matchesSearch = 
-      lead.schoolName.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      lead.contactPerson.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      lead.email.toLowerCase().includes(searchQuery.toLowerCase());
-    
-    const matchesStatus = statusFilter === 'all' || lead.status === statusFilter;
-    const matchesStaff = staffFilter === 'all' || lead.assignedStaffId === staffFilter;
+  const handleDownloadCSV = () => {
+    try {
+      const headers = ['School Name', 'Contact Person', 'Email', 'Phone', 'Status', 'Assigned Staff', 'Country', 'Student Count', 'Last Activity'];
+      const rows = paginatedLeads.map(lead => [
+        lead.schoolName,
+        lead.contactPerson,
+        lead.email,
+        lead.phone,
+        getStatusLabel(lead.status),
+        lead.assignedStaff,
+        lead.country,
+        lead.studentCount.toString(),
+        lead.lastActivity.toISOString(),
+      ]);
 
-    return matchesSearch && matchesStatus && matchesStaff;
+      const csvContent = [
+        headers.join(','),
+        ...rows.map(row => row.map(cell => `"${cell.replace(/"/g, '""')}"`).join(',')),
+      ].join('\n');
+
+      const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+      const link = document.createElement('a');
+      const url = URL.createObjectURL(blob);
+      link.setAttribute('href', url);
+      link.setAttribute('download', `leads_${new Date().toISOString().split('T')[0]}.csv`);
+      link.style.visibility = 'hidden';
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+
+      toast({
+        title: 'Success',
+        description: `Downloaded ${paginatedLeads.length} leads as CSV.`,
+      });
+    } catch (error) {
+      toast({
+        title: 'Error',
+        description: 'Failed to download leads. Please try again.',
+        variant: 'destructive',
+      });
+    }
+  };
+
+  const handleDownloadXLSX = async () => {
+    try {
+      const XLSX = await import('xlsx');
+      const wsData = [
+        ['School Name', 'Contact Person', 'Email', 'Phone', 'Status', 'Assigned Staff', 'Country', 'Student Count', 'Last Activity'],
+        ...paginatedLeads.map(lead => [
+          lead.schoolName,
+          lead.contactPerson,
+          lead.email,
+          lead.phone,
+          getStatusLabel(lead.status),
+          lead.assignedStaff,
+          lead.country,
+          lead.studentCount,
+          lead.lastActivity?.toISOString?.() ?? '',
+        ])
+      ];
+
+      const ws = XLSX.utils.aoa_to_sheet(wsData);
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, 'Leads');
+      const wbout = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
+      const blob = new Blob([wbout], { type: 'application/octet-stream' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `leads_${new Date().toISOString().split('T')[0]}.xlsx`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+
+      toast({ title: 'Success', description: `Downloaded ${paginatedLeads.length} leads as XLSX.` });
+    } catch (err) {
+      console.error('XLSX export error', err);
+      toast({ title: 'Error', description: 'Failed to export XLSX', variant: 'destructive' });
+    }
+  };
+
+  const queryClient = useQueryClient();
+
+  const { data: staffResp } = useQuery({
+    queryKey: ['salesUsers'],
+    queryFn: async () => {
+      const res: any = await leadsService.getSalesUsers();
+      return res?.data?.users ?? [];
+    },
+    placeholderData: [],
   });
+
+  const staffList = staffResp ?? [];
+
+  const handleStatusChange = async (leadId: string, newStatus: LeadStatus) => {
+    try {
+      await leadsService.patchLeadStatus(leadId, newStatus);
+      toast({ title: 'Success', description: `Status updated.` });
+      queryClient.invalidateQueries({ queryKey: ['leads'] });
+    } catch (err) {
+      toast({ title: 'Error', description: 'Failed to update status', variant: 'destructive' });
+    }
+  };
+
+  type LeadsData = { leads: any[]; pagination: { total: number } };
+  const { data: leadsResp, isLoading } = useQuery<LeadsData>({
+    queryKey: ['leads', { page, searchQuery, statusFilter, staffFilter }],
+    queryFn: async () => {
+      const params: any = { page, limit: pageSize };
+      if (searchQuery) params.search = searchQuery;
+      if (statusFilter !== 'all') params.status = statusFilter;
+      if (staffFilter !== 'all') params.staffId = staffFilter;
+      const res: any = await leadsService.getLeads(params);
+      return res?.data ?? { leads: [], pagination: { total: 0 } };
+    },
+    placeholderData: (previousData) => previousData ?? { leads: [], pagination: { total: 0 } },
+  });
+
+  const paginatedLeads = leadsResp?.leads ?? [];
+  const total = leadsResp?.pagination?.total ?? paginatedLeads.length;
+  const totalPages = Math.max(1, Math.ceil(total / pageSize));
+
+  const gotoPage = (p: number) => setPage(Math.max(0, Math.min(totalPages - 1, p)));
 
   return (
     <div className="space-y-6">
@@ -103,15 +222,15 @@ const Leads = () => {
             </SelectTrigger>
             <SelectContent className="bg-card">
               <SelectItem value="all">All Staff</SelectItem>
-              {staff.map(s => (
+              {staffList.map((s: any) => (
                 <SelectItem key={s.id} value={s.id}>
-                  {s.name}
+                  {s.full_name || s.name}
                 </SelectItem>
               ))}
             </SelectContent>
           </Select>
 
-          <Button variant="outline" size="icon">
+          <Button variant="outline" size="icon" onClick={handleDownloadXLSX}>
             <Download className="h-4 w-4" />
           </Button>
         </div>
@@ -132,7 +251,7 @@ const Leads = () => {
             </TableRow>
           </TableHeader>
           <TableBody>
-            {filteredLeads.length === 0 ? (
+            {paginatedLeads.length === 0 ? (
               <TableRow>
                 <TableCell colSpan={7} className="h-24 text-center">
                   <div className="flex flex-col items-center gap-2">
@@ -144,7 +263,7 @@ const Leads = () => {
                 </TableCell>
               </TableRow>
             ) : (
-              filteredLeads.map((lead) => (
+              paginatedLeads.map((lead) => (
                 <TableRow key={lead.id} className="table-row-hover">
                   <TableCell>
                     <Link 
@@ -183,22 +302,29 @@ const Leads = () => {
                       </DropdownMenuTrigger>
                       <DropdownMenuContent align="end" className="bg-card">
                         <DropdownMenuItem asChild>
-                          <Link to={`/leads/${lead.id}`} className="flex items-center cursor-pointer">
+                          <Link to={`/leads/${lead.id}?compact=true`} className="flex items-center cursor-pointer">
                             <Eye className="mr-2 h-4 w-4" />
                             View Details
                           </Link>
                         </DropdownMenuItem>
-                        <DropdownMenuItem>
-                          <Edit className="mr-2 h-4 w-4" />
-                          Edit Lead
-                        </DropdownMenuItem>
-                        <DropdownMenuSeparator />
-                        <DropdownMenuLabel>Change Status</DropdownMenuLabel>
-                        {statusOptions.map(status => (
-                          <DropdownMenuItem key={status}>
-                            {getStatusLabel(status)}
-                          </DropdownMenuItem>
-                        ))}
+
+                        {lead.status !== 'converted' && (
+                          <>
+                            <DropdownMenuItem asChild>
+                              <Link to={`/leads/${lead.id}/edit`} className="flex items-center cursor-pointer">
+                                <Edit className="mr-2 h-4 w-4" />
+                                Edit Lead
+                              </Link>
+                            </DropdownMenuItem>
+                            <DropdownMenuSeparator />
+                            <DropdownMenuLabel>Change Status</DropdownMenuLabel>
+                            {statusOptions.map(status => (
+                              <DropdownMenuItem key={status} onClick={() => handleStatusChange(lead.id, status)}>
+                                {getStatusLabel(status)}
+                              </DropdownMenuItem>
+                            ))}
+                          </>
+                        )}
                       </DropdownMenuContent>
                     </DropdownMenu>
                   </TableCell>
@@ -209,9 +335,22 @@ const Leads = () => {
         </Table>
       </div>
 
-      {/* Summary */}
+      {/* Summary + Pagination */}
       <div className="flex items-center justify-between text-sm text-muted-foreground">
-        <p>Showing {filteredLeads.length} of {leads.length} leads</p>
+        <p>
+          {total === 0
+            ? `Showing 0 of 0 leads`
+            : `Showing ${page * pageSize + 1} - ${Math.min((page + 1) * pageSize, total)} of ${total} leads`}
+        </p>
+        <div className="flex items-center gap-2">
+          <Button variant="outline" size="sm" onClick={() => gotoPage(page - 1)} disabled={page === 0}>
+            Prev
+          </Button>
+          <div className="text-sm text-muted-foreground">Page {page + 1} of {totalPages}</div>
+          <Button variant="outline" size="sm" onClick={() => gotoPage(page + 1)} disabled={page >= totalPages - 1}>
+            Next
+          </Button>
+        </div>
       </div>
       <AddLeadDialog open={addLeadOpen} onOpenChange={setAddLeadOpen} />
     </div>

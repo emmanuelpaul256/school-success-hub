@@ -6,7 +6,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { leadTrendData, leadsChartData, staff } from '@/data/mockData';
+import { useQuery } from '@tanstack/react-query';
+import { dashboardService } from '@/services';
 import {
   LineChart,
   Line,
@@ -23,30 +24,66 @@ import {
   Legend,
 } from 'recharts';
 import { useState } from 'react';
+import { getStatusLabel } from '@/lib/leadUtils';
 import { TrendingUp, TrendingDown, Users, Clock, CheckCircle } from 'lucide-react';
-
-const staffPerformance = staff.map(s => ({
-  name: s.name.split(' ')[0],
-  conversions: Math.floor(Math.random() * 15) + 5,
-  demos: Math.floor(Math.random() * 20) + 10,
-}));
-
-const conversionTimeData = [
-  { range: '< 1 week', count: 8 },
-  { range: '1-2 weeks', count: 15 },
-  { range: '2-4 weeks', count: 22 },
-  { range: '1-2 months', count: 12 },
-  { range: '> 2 months', count: 5 },
-];
-
-const onboardingData = [
-  { name: 'Completed', value: 65, fill: 'hsl(var(--success))' },
-  { name: 'In Progress', value: 25, fill: 'hsl(var(--warning))' },
-  { name: 'Not Started', value: 10, fill: 'hsl(var(--muted-foreground))' },
-];
 
 const Analytics = () => {
   const [period, setPeriod] = useState('6months');
+
+  const { data: analyticsData, isLoading } = useQuery<any>({
+    queryKey: ['analytics', period],
+    queryFn: async () => {
+      const res: any = await dashboardService.getAnalytics({ period });
+      const payload = res?.data || {};
+
+      // Map API shape to component shape
+      const summary = payload.summary || {};
+      const trend = payload.trendData || { labels: [], leads: [], conversions: [], revenue: [] };
+
+      const leadTrendData = (trend.labels || []).map((label: string, idx: number) => ({
+        month: label,
+        leads: trend.leads?.[idx] ?? 0,
+        conversions: trend.conversions?.[idx] ?? 0,
+      }));
+
+      const staffPerformance = (payload.topPerformers || []).map((tp: any) => ({
+        name: tp.staffName || tp.staff_name || 'Unknown',
+        demos: tp.total ?? 0,
+        conversions: tp.leadsConverted ?? tp.conversions ?? 0,
+      }));
+
+      const palette = ['#6366F1', '#10B981', '#F59E0B', '#EF4444', '#8B5CF6', '#06B6D4'];
+      const leadsChartData = (payload.leadsByStatus || []).map((s: any, i: number) => ({
+        name: s.status,
+        value: s.count,
+        fill: palette[i % palette.length],
+      }));
+
+      // conversionTimeData and onboardingData are not present in this API; provide sensible defaults
+      const conversionTimeData = [];
+      const onboardingData = [];
+
+      const metrics = {
+        totalLeads: summary.totalLeads ?? 0,
+        totalLeadsChange: 0,
+        conversionRate: summary.conversion?.rate ?? 0,
+        conversionRateChange: summary.conversion?.trend ?? 0,
+        avgConversionTime: 0,
+        conversionTimeChange: 0,
+        onboardingRate: 0,
+        onboardingRateChange: 0,
+      };
+
+      return { leadTrendData, staffPerformance, leadsChartData, conversionTimeData, onboardingData, metrics };
+    },
+  });
+
+  const leadTrendData = analyticsData?.leadTrendData || [];
+  const staffPerformance = analyticsData?.staffPerformance || [];
+  const leadsChartData = analyticsData?.leadsChartData || [];
+  const conversionTimeData = analyticsData?.conversionTimeData || [];
+  const onboardingData = analyticsData?.onboardingData || [];
+  const metrics = analyticsData?.metrics || {};
 
   return (
     <div className="space-y-6">
@@ -80,13 +117,17 @@ const Analytics = () => {
                 <Users className="h-6 w-6" />
               </div>
               <div>
-                <p className="text-2xl font-bold">47</p>
+                <p className="text-2xl font-bold">{metrics.totalLeads || 0}</p>
                 <p className="text-sm text-muted-foreground">Total Leads</p>
               </div>
             </div>
-            <div className="flex items-center gap-1 mt-4 text-success text-sm">
-              <TrendingUp className="h-4 w-4" />
-              <span>+12% from last period</span>
+            <div className={`flex items-center gap-1 mt-4 text-sm ${(metrics.totalLeadsChange || 0) >= 0 ? 'text-success' : 'text-destructive'}`}>
+              {(metrics.totalLeadsChange || 0) >= 0 ? (
+                <TrendingUp className="h-4 w-4" />
+              ) : (
+                <TrendingDown className="h-4 w-4" />
+              )}
+              <span>{Math.abs(metrics.totalLeadsChange || 0)}% from last period</span>
             </div>
           </CardContent>
         </Card>
@@ -98,13 +139,17 @@ const Analytics = () => {
                 <CheckCircle className="h-6 w-6" />
               </div>
               <div>
-                <p className="text-2xl font-bold">32%</p>
+                <p className="text-2xl font-bold">{metrics.conversionRate || 0}%</p>
                 <p className="text-sm text-muted-foreground">Conversion Rate</p>
               </div>
             </div>
-            <div className="flex items-center gap-1 mt-4 text-success text-sm">
-              <TrendingUp className="h-4 w-4" />
-              <span>+5% from last period</span>
+            <div className={`flex items-center gap-1 mt-4 text-sm ${(metrics.conversionRateChange || 0) >= 0 ? 'text-success' : 'text-destructive'}`}>
+              {(metrics.conversionRateChange || 0) >= 0 ? (
+                <TrendingUp className="h-4 w-4" />
+              ) : (
+                <TrendingDown className="h-4 w-4" />
+              )}
+              <span>{Math.abs(metrics.conversionRateChange || 0)}% from last period</span>
             </div>
           </CardContent>
         </Card>
@@ -116,13 +161,17 @@ const Analytics = () => {
                 <Clock className="h-6 w-6" />
               </div>
               <div>
-                <p className="text-2xl font-bold">18 days</p>
+                <p className="text-2xl font-bold">{metrics.avgConversionTime || 0} days</p>
                 <p className="text-sm text-muted-foreground">Avg. Conversion Time</p>
               </div>
             </div>
-            <div className="flex items-center gap-1 mt-4 text-destructive text-sm">
-              <TrendingDown className="h-4 w-4" />
-              <span>+3 days from last period</span>
+            <div className={`flex items-center gap-1 mt-4 text-sm ${(metrics.conversionTimeChange || 0) <= 0 ? 'text-success' : 'text-destructive'}`}>
+              {(metrics.conversionTimeChange || 0) <= 0 ? (
+                <TrendingUp className="h-4 w-4" />
+              ) : (
+                <TrendingDown className="h-4 w-4" />
+              )}
+              <span>{Math.abs(metrics.conversionTimeChange || 0)} days from last period</span>
             </div>
           </CardContent>
         </Card>
@@ -134,13 +183,17 @@ const Analytics = () => {
                 <CheckCircle className="h-6 w-6" />
               </div>
               <div>
-                <p className="text-2xl font-bold">85%</p>
+                <p className="text-2xl font-bold">{metrics.onboardingRate || 0}%</p>
                 <p className="text-sm text-muted-foreground">Onboarding Rate</p>
               </div>
             </div>
-            <div className="flex items-center gap-1 mt-4 text-success text-sm">
-              <TrendingUp className="h-4 w-4" />
-              <span>+8% from last period</span>
+            <div className={`flex items-center gap-1 mt-4 text-sm ${(metrics.onboardingRateChange || 0) >= 0 ? 'text-success' : 'text-destructive'}`}>
+              {(metrics.onboardingRateChange || 0) >= 0 ? (
+                <TrendingUp className="h-4 w-4" />
+              ) : (
+                <TrendingDown className="h-4 w-4" />
+              )}
+              <span>{Math.abs(metrics.onboardingRateChange || 0)}% from last period</span>
             </div>
           </CardContent>
         </Card>
@@ -272,11 +325,20 @@ const Analytics = () => {
                 </PieChart>
               </ResponsiveContainer>
             </div>
+            <div className="mt-3 grid grid-cols-2 gap-2">
+              {leadsChartData.map((s: any) => (
+                <div key={s.name} className="flex items-center gap-2 text-sm">
+                  <span className="inline-block h-3 w-3 rounded" style={{ backgroundColor: s.fill }} />
+                  <span>{getStatusLabel((s.name as any) as any) || String(s.name)}</span>
+                  <span className="text-muted-foreground ml-2">({s.value})</span>
+                </div>
+              ))}
+            </div>
           </CardContent>
         </Card>
 
         {/* Demo to Conversion Time */}
-        <Card className="card-elevated">
+        {/* <Card className="card-elevated">
           <CardHeader>
             <CardTitle>Demo to Conversion Time</CardTitle>
           </CardHeader>
@@ -305,10 +367,10 @@ const Analytics = () => {
               </ResponsiveContainer>
             </div>
           </CardContent>
-        </Card>
+        </Card> */}
 
         {/* Onboarding Status */}
-        <Card className="card-elevated">
+        {/* <Card className="card-elevated">
           <CardHeader>
             <CardTitle>Onboarding Status</CardTitle>
           </CardHeader>
@@ -348,7 +410,7 @@ const Analytics = () => {
               </ResponsiveContainer>
             </div>
           </CardContent>
-        </Card>
+        </Card> */}
       </div>
     </div>
   );

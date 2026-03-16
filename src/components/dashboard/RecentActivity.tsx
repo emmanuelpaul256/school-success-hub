@@ -1,4 +1,6 @@
-import { activities } from '@/data/mockData';
+import { useQuery } from '@tanstack/react-query';
+import { otherService } from '@/services';
+import { Link } from 'react-router-dom';
 import { formatDistanceToNow } from 'date-fns';
 import { 
   UserPlus, 
@@ -6,13 +8,15 @@ import {
   MessageSquare, 
   Calendar, 
   CheckCircle, 
-  School 
+  School,
+  Activity as ActivityIcon
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 const activityIcons = {
   lead_added: UserPlus,
   status_changed: RefreshCw,
+  status_change: RefreshCw,
   note_added: MessageSquare,
   demo_scheduled: Calendar,
   demo_completed: CheckCircle,
@@ -22,6 +26,7 @@ const activityIcons = {
 const activityColors = {
   lead_added: 'bg-info/10 text-info',
   status_changed: 'bg-primary/10 text-primary',
+  status_change: 'bg-primary/10 text-primary',
   note_added: 'bg-muted text-muted-foreground',
   demo_scheduled: 'bg-warning/10 text-warning',
   demo_completed: 'bg-success/10 text-success',
@@ -29,8 +34,21 @@ const activityColors = {
 };
 
 export const RecentActivity = () => {
+  const { data: activityResp, isLoading } = useQuery({
+    queryKey: ['activities', 'recent'],
+    queryFn: async () => {
+      const res: any = await otherService.getActivities({ limit: 20 });
+      return res?.data?.activities ?? [];
+    },
+  });
+
+  const activities = activityResp || [];
   const recentActivities = activities
-    .sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime())
+    .map((a: any) => ({
+      ...a,
+      timestamp: typeof a.timestamp === 'string' ? new Date(a.timestamp) : a.timestamp,
+    }))
+    .sort((a: any, b: any) => b.timestamp.getTime() - a.timestamp.getTime())
     .slice(0, 8);
 
   return (
@@ -38,13 +56,16 @@ export const RecentActivity = () => {
       <h3 className="text-lg font-semibold mb-4">Recent Activity</h3>
       
       <div className="space-y-1">
-        {recentActivities.map((activity, index) => {
-          const Icon = activityIcons[activity.type];
-          const colorClass = activityColors[activity.type];
-          
-          return (
+        {isLoading ? (
+          <p className="text-sm text-muted-foreground">Loading activities...</p>
+        ) : recentActivities.length === 0 ? (
+          <p className="text-sm text-muted-foreground">No recent activities</p>
+        ) : (
+          recentActivities.map((activity: any, index: number) => {
+          const Icon = activityIcons[activity.type] || ActivityIcon;
+          const colorClass = activityColors[activity.type] || 'bg-muted text-muted-foreground';
+          const content = (
             <div
-              key={activity.id}
               className="flex items-start gap-3 p-2 rounded-lg hover:bg-muted/50 transition-colors"
             >
               <div className={cn(
@@ -63,7 +84,14 @@ export const RecentActivity = () => {
               </div>
             </div>
           );
-        })}
+
+          return (
+            <Link key={activity.id} to={`/activity`} className="block">
+              {content}
+            </Link>
+          );
+        })
+        )}
       </div>
     </div>
   );

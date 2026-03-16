@@ -1,5 +1,7 @@
 import { Bell, Menu } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { useQuery } from '@tanstack/react-query';
+import { otherService } from '@/services';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -8,7 +10,6 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-import { notifications } from '@/data/mockData';
 import { formatDistanceToNow } from 'date-fns';
 import { cn } from '@/lib/utils';
 import { Link } from 'react-router-dom';
@@ -18,15 +19,19 @@ interface HeaderProps {
 }
 
 export const Header = ({ onMenuClick }: HeaderProps) => {
-  const unreadCount = notifications.filter(n => !n.read).length;
+  const { data: notificationsResp = [] } = useQuery({
+    queryKey: ['header', 'notifications', 'unread'],
+    queryFn: async () => {
+      const res: any = await otherService.getUnreadNotifications();
+      return res?.data?.notifications ?? [];
+    },
+    refetchInterval: 3000,
+    refetchIntervalInBackground: true,
+    staleTime: 2000,
+  });
 
-  const getPriorityColor = (priority: string) => {
-    switch (priority) {
-      case 'high': return 'bg-destructive';
-      case 'medium': return 'bg-warning';
-      default: return 'bg-info';
-    }
-  };
+  const notifications = notificationsResp || [];
+  const unreadCount = notifications.filter((n: any) => !n.is_read).length;
 
   return (
     <header className="sticky top-0 z-30 flex h-16 items-center gap-4 border-b bg-card px-4 md:px-6">
@@ -61,29 +66,25 @@ export const Header = ({ onMenuClick }: HeaderProps) => {
             <div className="max-h-96 overflow-y-auto scrollbar-thin">
               {notifications.slice(0, 5).map((notification) => (
                 <DropdownMenuItem key={notification.id} asChild>
-                  <Link
-                    to={notification.link}
+                  <div
                     className={cn(
-                      'flex flex-col items-start gap-1 p-3 cursor-pointer',
-                      !notification.read && 'bg-muted/50'
+                      'flex flex-col items-start gap-1 p-3',
+                      !notification.is_read && 'bg-muted/50'
                     )}
                   >
                     <div className="flex items-center gap-2 w-full">
-                      <div className={cn(
-                        'h-2 w-2 rounded-full',
-                        getPriorityColor(notification.priority)
-                      )} />
+                      <div className="h-2 w-2 rounded-full bg-info" />
                       <span className="font-medium text-sm flex-1">
                         {notification.title}
                       </span>
                     </div>
                     <p className="text-xs text-muted-foreground line-clamp-2">
-                      {notification.description}
+                      {notification.body}
                     </p>
                     <span className="text-xs text-muted-foreground">
-                      {formatDistanceToNow(notification.timestamp, { addSuffix: true })}
+                      {formatDistanceToNow(new Date(notification.created_at), { addSuffix: true })}
                     </span>
-                  </Link>
+                  </div>
                 </DropdownMenuItem>
               ))}
             </div>

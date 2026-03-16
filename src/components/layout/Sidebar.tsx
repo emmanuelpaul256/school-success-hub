@@ -58,7 +58,7 @@ export const Sidebar = ({ collapsed, onToggle }: SidebarProps) => {
     navigate('/login');
   };
 
-  const displayName = user?.name || currentUser.name;
+  const displayName = (user as any)?.fullName || currentUser.name;
   const displayEmail = user?.email || currentUser.email;
   const initials = displayName.split(' ').map((n: string) => n[0]).join('').slice(0, 2).toUpperCase();
 
@@ -89,7 +89,7 @@ export const Sidebar = ({ collapsed, onToggle }: SidebarProps) => {
         </div>
         {!collapsed && (
           <span className="text-lg font-semibold text-sidebar-accent-foreground">
-            EduConnect
+            Nibble CRM
           </span>
         )}
       </div>

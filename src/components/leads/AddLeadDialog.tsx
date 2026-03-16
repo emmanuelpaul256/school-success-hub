@@ -2,6 +2,8 @@ import { useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
+import { useQuery, useMutation } from '@tanstack/react-query';
+import { leadsService, otherService } from '@/services';
 import {
   Dialog,
   DialogContent,
@@ -28,19 +30,21 @@ import {
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Button } from '@/components/ui/button';
-import { staff } from '@/data/mockData';
-import { toast } from '@/hooks/use-toast';
+import { useToast } from '@/hooks/use-toast';
 
 const addLeadSchema = z.object({
-  schoolName: z.string().min(1, 'School name is required'),
-  contactPerson: z.string().min(1, 'Contact person is required'),
-  email: z.string().email('Invalid email address'),
-  phone: z.string().min(1, 'Phone number is required'),
-  role: z.string().min(1, 'Role is required'),
+  firstname: z.string().min(1, 'First name is required'),
+  secondname: z.string().min(1, 'Last name is required'),
+  institution_name: z.string().min(1, 'School/Institution name is required'),
+  jobtitle: z.string().min(1, 'Job title is required'),
+  workemail: z.string().email('Invalid email address'),
+  phonenumber: z.string().min(1, 'Phone number is required'),
   country: z.string().min(1, 'Country is required'),
-  studentCount: z.coerce.number().min(1, 'Student count must be at least 1'),
-  painPoint: z.string().min(1, 'Please describe the key challenge'),
-  assignedStaffId: z.string().min(1, 'Please assign a staff member'),
+  city: z.string().min(1, 'City is required'),
+  size_of_institution: z.string().min(1, 'Institution size is required'),
+  categories: z.string().min(1, 'Category is required'),
+  question_on_preference: z.string().optional(),
+  institution: z.string().optional(),
 });
 
 type AddLeadFormValues = z.infer<typeof addLeadSchema>;
@@ -51,37 +55,64 @@ interface AddLeadDialogProps {
 }
 
 const AddLeadDialog = ({ open, onOpenChange }: AddLeadDialogProps) => {
+  const { toast } = useToast();
+
+  // Fetch staff from API
+  const { data: staffResponse } = useQuery({
+    queryKey: ['staff'],
+    queryFn: async () => {
+      const res: any = await otherService.getStaff();
+      return res?.data || [];
+    },
+  });
+
+  const staff = Array.isArray(staffResponse) ? staffResponse : [];
+
   const form = useForm<AddLeadFormValues>({
     resolver: zodResolver(addLeadSchema),
     defaultValues: {
-      schoolName: '',
-      contactPerson: '',
-      email: '',
-      phone: '',
-      role: '',
+      firstname: '',
+      secondname: '',
+      institution_name: '',
+      jobtitle: '',
+      workemail: '',
+      phonenumber: '',
       country: '',
-      studentCount: 0,
-      painPoint: '',
-      assignedStaffId: '',
+      city: '',
+      size_of_institution: '',
+      categories: '',
+      question_on_preference: '',
+      institution: '',
+    },
+  });
+
+  // Create lead mutation
+  const createMutation = useMutation({
+    mutationFn: async (values: AddLeadFormValues) => {
+      console.log('Creating lead with values:', values);
+      return leadsService.createLead(values);
+    },
+    onSuccess: (res: any) => {
+      const schoolName = res?.data?.institution_name || 'Lead';
+      toast({
+        title: 'Success',
+        description: `${schoolName} has been added as a new lead.`,
+      });
+      form.reset();
+      onOpenChange(false);
+    },
+    onError: (error: any) => {
+      toast({
+        title: 'Error',
+        description: 'Failed to add lead. Please try again.',
+        variant: 'destructive',
+      });
+      console.error('Create lead error:', error);
     },
   });
 
   const onSubmit = (values: AddLeadFormValues) => {
-    const assignedStaffMember = staff.find(s => s.id === values.assignedStaffId);
-    console.log('New lead:', {
-      ...values,
-      assignedStaff: assignedStaffMember?.name,
-      status: 'new',
-      createdAt: new Date(),
-      lastActivity: new Date(),
-      notes: [],
-    });
-    toast({
-      title: 'Lead added',
-      description: `${values.schoolName} has been added as a new lead.`,
-    });
-    form.reset();
-    onOpenChange(false);
+    createMutation.mutate(values);
   };
 
   return (
@@ -98,12 +129,12 @@ const AddLeadDialog = ({ open, onOpenChange }: AddLeadDialogProps) => {
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <FormField
                 control={form.control}
-                name="schoolName"
+                name="institution_name"
                 render={({ field }) => (
                   <FormItem className="sm:col-span-2">
-                    <FormLabel>School Name</FormLabel>
+                    <FormLabel>School/Institution Name</FormLabel>
                     <FormControl>
-                      <Input placeholder="e.g. Springfield Elementary" {...field} />
+                      <Input placeholder="e.g. Green Valley Secondary School" {...field} />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
@@ -111,12 +142,12 @@ const AddLeadDialog = ({ open, onOpenChange }: AddLeadDialogProps) => {
               />
               <FormField
                 control={form.control}
-                name="contactPerson"
+                name="firstname"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Contact Person</FormLabel>
+                    <FormLabel>First Name</FormLabel>
                     <FormControl>
-                      <Input placeholder="Full name" {...field} />
+                      <Input placeholder="First name" {...field} />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
@@ -124,12 +155,12 @@ const AddLeadDialog = ({ open, onOpenChange }: AddLeadDialogProps) => {
               />
               <FormField
                 control={form.control}
-                name="role"
+                name="secondname"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Role</FormLabel>
+                    <FormLabel>Last Name</FormLabel>
                     <FormControl>
-                      <Input placeholder="e.g. Principal" {...field} />
+                      <Input placeholder="Last name" {...field} />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
@@ -137,7 +168,20 @@ const AddLeadDialog = ({ open, onOpenChange }: AddLeadDialogProps) => {
               />
               <FormField
                 control={form.control}
-                name="email"
+                name="jobtitle"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Job Title</FormLabel>
+                    <FormControl>
+                      <Input placeholder="e.g. ICT Coordinator" {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name="workemail"
                 render={({ field }) => (
                   <FormItem>
                     <FormLabel>Email</FormLabel>
@@ -150,12 +194,12 @@ const AddLeadDialog = ({ open, onOpenChange }: AddLeadDialogProps) => {
               />
               <FormField
                 control={form.control}
-                name="phone"
+                name="phonenumber"
                 render={({ field }) => (
                   <FormItem>
                     <FormLabel>Phone</FormLabel>
                     <FormControl>
-                      <Input placeholder="+1 555-0100" {...field} />
+                      <Input placeholder="+256 701 234567" {...field} />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
@@ -168,7 +212,7 @@ const AddLeadDialog = ({ open, onOpenChange }: AddLeadDialogProps) => {
                   <FormItem>
                     <FormLabel>Country</FormLabel>
                     <FormControl>
-                      <Input placeholder="e.g. United States" {...field} />
+                      <Input placeholder="e.g. Uganda" {...field} />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
@@ -176,12 +220,12 @@ const AddLeadDialog = ({ open, onOpenChange }: AddLeadDialogProps) => {
               />
               <FormField
                 control={form.control}
-                name="studentCount"
+                name="city"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Number of Students</FormLabel>
+                    <FormLabel>City</FormLabel>
                     <FormControl>
-                      <Input type="number" placeholder="500" {...field} />
+                      <Input placeholder="e.g. Kampala" {...field} />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
@@ -189,42 +233,63 @@ const AddLeadDialog = ({ open, onOpenChange }: AddLeadDialogProps) => {
               />
               <FormField
                 control={form.control}
-                name="assignedStaffId"
+                name="size_of_institution"
                 render={({ field }) => (
-                  <FormItem className="sm:col-span-2">
-                    <FormLabel>Assign to Staff</FormLabel>
+                  <FormItem>
+                    <FormLabel>Institution Size</FormLabel>
+                    <FormControl>
+                      <Input placeholder="e.g. 500-1000 students" {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name="categories"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Category</FormLabel>
+                    <FormControl>
+                      <Input placeholder="e.g. education" {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name="institution"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Institution Type</FormLabel>
+                    <FormControl>
+                      <Input placeholder="e.g. Secondary School" {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name="question_on_preference"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>How did you hear about us?</FormLabel>
                     <Select onValueChange={field.onChange} defaultValue={field.value}>
                       <FormControl>
                         <SelectTrigger>
-                          <SelectValue placeholder="Select staff member" />
+                          <SelectValue placeholder="Select option" />
                         </SelectTrigger>
                       </FormControl>
                       <SelectContent className="bg-card">
-                        {staff.map(s => (
-                          <SelectItem key={s.id} value={s.id}>
-                            {s.name}
-                          </SelectItem>
-                        ))}
+                        <SelectItem value="social_media">Social Media</SelectItem>
+                        <SelectItem value="email">Email</SelectItem>
+                        <SelectItem value="referral">Referral</SelectItem>
+                        <SelectItem value="other">Other</SelectItem>
                       </SelectContent>
+                      
                     </Select>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-              <FormField
-                control={form.control}
-                name="painPoint"
-                render={({ field }) => (
-                  <FormItem className="sm:col-span-2">
-                    <FormLabel>Key Challenge / Pain Point</FormLabel>
-                    <FormControl>
-                      <Textarea
-                        placeholder="Describe the school's main challenge..."
-                        className="resize-none"
-                        rows={3}
-                        {...field}
-                      />
-                    </FormControl>
                     <FormMessage />
                   </FormItem>
                 )}
@@ -234,7 +299,9 @@ const AddLeadDialog = ({ open, onOpenChange }: AddLeadDialogProps) => {
               <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
                 Cancel
               </Button>
-              <Button type="submit">Add Lead</Button>
+              <Button type="submit" disabled={createMutation.isPending}>
+                {createMutation.isPending ? 'Adding...' : 'Add Lead'}
+              </Button>
             </DialogFooter>
           </form>
         </Form>

@@ -1,5 +1,6 @@
 import { useState } from 'react';
-import { notifications } from '@/data/mockData';
+import { useQuery } from '@tanstack/react-query';
+import { otherService } from '@/services';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { formatDistanceToNow } from 'date-fns';
@@ -16,47 +17,56 @@ import {
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
-const notificationIcons = {
-  new_lead: UserPlus,
-  demo_reminder: Calendar,
-  follow_up_overdue: Clock,
-  onboarding_overdue: AlertTriangle,
-  subscription_expiring: CreditCard,
-};
-
-const notificationColors = {
-  new_lead: 'bg-info/10 text-info',
-  demo_reminder: 'bg-warning/10 text-warning',
-  follow_up_overdue: 'bg-destructive/10 text-destructive',
-  onboarding_overdue: 'bg-warning/10 text-warning',
-  subscription_expiring: 'bg-chart-5/10 text-chart-5',
-};
+// Default notification icon and color
+const defaultIcon = UserPlus;
+const defaultColor = 'bg-info/10 text-info';
 
 const Notifications = () => {
-  const [notificationsList, setNotificationsList] = useState(notifications);
+  const [dismissedIds, setDismissedIds] = useState<Set<string>>(new Set());
+  const [readIds, setReadIds] = useState<Set<string>>(new Set());
+
+  const { data: notificationsResp = [], isLoading } = useQuery({
+    queryKey: ['notifications', 'unread'],
+    queryFn: async () => {
+      const res: any = await otherService.getUnreadNotifications();
+      return res?.data?.notifications ?? [];
+    },
+    refetchInterval: 3000,
+    refetchIntervalInBackground: true,
+    staleTime: 2000,
+  });
+
+  const allNotifications = notificationsResp || [];
+  const notificationsList = allNotifications.filter(n => !dismissedIds.has(String(n.id)));
   
-  const unreadCount = notificationsList.filter(n => !n.read).length;
+  const unreadCount = notificationsList.filter(n => !readIds.has(String(n.id)) && !n.is_read).length;
 
-  const markAsRead = (id: string) => {
-    setNotificationsList(prev =>
-      prev.map(n => (n.id === id ? { ...n, read: true } : n))
-    );
-  };
-
-  const markAllAsRead = () => {
-    setNotificationsList(prev => prev.map(n => ({ ...n, read: true })));
-  };
-
-  const dismissNotification = (id: string) => {
-    setNotificationsList(prev => prev.filter(n => n.id !== id));
-  };
-
-  const getPriorityBadge = (priority: string) => {
-    switch (priority) {
-      case 'high': return <Badge variant="error">High</Badge>;
-      case 'medium': return <Badge variant="warning">Medium</Badge>;
-      default: return <Badge variant="secondary">Low</Badge>;
+  const markAsRead = async (id: number) => {
+    const idStr = String(id);
+    setReadIds(prev => new Set(prev).add(idStr));
+    try {
+      await otherService.markNotificationAsRead(String(id));
+    } catch (err) {
+      setReadIds(prev => {
+        const next = new Set(prev);
+        next.delete(idStr);
+        return next;
+      });
     }
+  };
+
+  const markAllAsRead = async () => {
+    const unreadNotifications = notificationsList.filter(n => !readIds.has(String(n.id)) && !n.is_read);
+    unreadNotifications.forEach(n => setReadIds(prev => new Set(prev).add(String(n.id))));
+    try {
+      await otherService.markAllNotificationsAsRead();
+    } catch (err) {
+      setReadIds(new Set());
+    }
+  };
+
+  const dismissNotification = (id: number) => {
+    setDismissedIds(prev => new Set(prev).add(String(id)));
   };
 
   return (
@@ -97,15 +107,15 @@ const Notifications = () => {
           </div>
         ) : (
           notificationsList.map((notification) => {
-            const Icon = notificationIcons[notification.type];
-            const colorClass = notificationColors[notification.type];
+            const Icon = defaultIcon;
+            const colorClass = defaultColor;
 
             return (
               <div
                 key={notification.id}
                 className={cn(
                   'card-elevated p-4 flex items-start gap-4 transition-all animate-fade-in',
-                  !notification.read && 'ring-2 ring-primary/20 bg-primary/5'
+                  !notification.is_read && 'ring-2 ring-primary/20 bg-primary/5'
                 )}
               >
                 <div
@@ -122,7 +132,7 @@ const Notifications = () => {
                     <div>
                       <p className="font-medium">{notification.title}</p>
                       <p className="text-sm text-muted-foreground mt-0.5">
-                        {notification.description}
+                        {notification.body}
                       </p>
                     </div>
                     <Button
@@ -136,11 +146,10 @@ const Notifications = () => {
                   </div>
 
                   <div className="flex items-center gap-3 mt-3">
-                    {getPriorityBadge(notification.priority)}
                     <span className="text-xs text-muted-foreground">
-                      {formatDistanceToNow(notification.timestamp, { addSuffix: true })}
+                      {formatDistanceToNow(new Date(notification.created_at), { addSuffix: true })}
                     </span>
-                    {!notification.read ? (
+                    {!notification.is_read ? (
                       <Button
                         variant="ghost"
                         size="sm"
@@ -155,9 +164,6 @@ const Notifications = () => {
                         Read
                       </span>
                     )}
-                    <Button variant="outline" size="sm" className="h-7 text-xs" asChild>
-                      <Link to={notification.link}>View Details</Link>
-                    </Button>
                   </div>
                 </div>
               </div>

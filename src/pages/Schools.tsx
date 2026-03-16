@@ -1,5 +1,7 @@
 import { useState } from 'react';
-import { schools, staff } from '@/data/mockData';
+import { useNavigate } from 'react-router-dom';
+import { useQuery } from '@tanstack/react-query';
+import { schoolsService } from '@/services';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -25,20 +27,32 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-import { Search, MoreHorizontal, Eye, ArrowUpCircle, MessageSquare, Users, GraduationCap } from 'lucide-react';
+import { Search, MoreHorizontal, Eye, Users, GraduationCap } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 const Schools = () => {
+  const navigate = useNavigate();
   const [searchQuery, setSearchQuery] = useState('');
   const [planFilter, setPlanFilter] = useState<string>('all');
   const [statusFilter, setStatusFilter] = useState<string>('all');
+  const [page, setPage] = useState<number>(0);
+  const [limit, setLimit] = useState<number>(50);
 
-  const filteredSchools = schools.filter(school => {
-    const matchesSearch = school.name.toLowerCase().includes(searchQuery.toLowerCase());
-    const matchesPlan = planFilter === 'all' || school.planType === planFilter;
-    const matchesStatus = statusFilter === 'all' || school.subscriptionStatus === statusFilter;
-    return matchesSearch && matchesPlan && matchesStatus;
+  const { data: schoolsResp, isLoading } = useQuery({
+    queryKey: ['schools', { searchQuery, planFilter, statusFilter, page, limit }],
+    queryFn: async () => {
+      const params: any = { page, limit };
+      if (searchQuery) params.search = searchQuery;
+      if (planFilter !== 'all') params.planType = planFilter;
+      if (statusFilter !== 'all') params.subscriptionStatus = statusFilter;
+      const res: any = await schoolsService.getSchools(params);
+      return res?.data ?? { schools: [], pagination: {}, summary: {} };
+    },
   });
+
+  const filteredSchools = schoolsResp?.schools ?? [];
+  const pagination = schoolsResp?.pagination ?? { page: page, limit: limit, total: filteredSchools.length, totalPages: 1 };
+  const summary = schoolsResp?.summary ?? { totalSchools: filteredSchools.length, totalStudents: filteredSchools.reduce((acc: number, s: any) => acc + (s.studentCount ?? s.student_count ?? 0), 0), activeSubscriptions: 0, onboardingInProgress: filteredSchools.filter((s: any) => (s.onboardingStatus ?? s.onboarding_status) === 'in_progress').length };
 
   const getSubscriptionBadge = (status: string) => {
     switch (status) {
@@ -60,12 +74,11 @@ const Schools = () => {
   };
 
   const getPlanBadge = (plan: string) => {
-    switch (plan) {
-      case 'enterprise': return <Badge className="bg-chart-5/10 text-chart-5 border-transparent">Enterprise</Badge>;
-      case 'professional': return <Badge variant="info">Professional</Badge>;
-      case 'starter': return <Badge variant="secondary">Starter</Badge>;
-      default: return <Badge>{plan}</Badge>;
-    }
+    const p = String(plan || '').toLowerCase();
+    if (p.includes('enterprise')) return <Badge className="bg-chart-5/10 text-chart-5 border-transparent">Enterprise</Badge>;
+    if (p.includes('professional')) return <Badge variant="info">Professional</Badge>;
+    if (p.includes('starter')) return <Badge variant="secondary">Starter</Badge>;
+    return <Badge>{plan}</Badge>;
   };
 
   return (
@@ -87,7 +100,7 @@ const Schools = () => {
             <GraduationCap className="h-6 w-6" />
           </div>
           <div>
-            <p className="text-2xl font-bold">{schools.length}</p>
+            <p className="text-2xl font-bold">{summary.totalSchools ?? filteredSchools.length}</p>
             <p className="text-sm text-muted-foreground">Total Schools</p>
           </div>
         </div>
@@ -97,18 +110,18 @@ const Schools = () => {
           </div>
           <div>
             <p className="text-2xl font-bold">
-              {schools.reduce((acc, s) => acc + s.studentCount, 0).toLocaleString()}
+              {(summary.totalStudents ?? filteredSchools.reduce((acc: number, s: any) => acc + (s.studentCount || 0), 0)).toLocaleString()}
             </p>
             <p className="text-sm text-muted-foreground">Total Students</p>
           </div>
         </div>
         <div className="card-elevated p-4 flex items-center gap-4">
           <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-warning/10 text-warning">
-            <ArrowUpCircle className="h-6 w-6" />
+            {/* <ArrowUpCircle className="h-6 w-6" /> */}
           </div>
           <div>
             <p className="text-2xl font-bold">
-              {schools.filter(s => s.onboardingStatus === 'in_progress').length}
+              {summary.onboardingInProgress ?? filteredSchools.filter((s: any) => s.onboardingStatus === 'in_progress').length}
             </p>
             <p className="text-sm text-muted-foreground">Onboarding</p>
           </div>
@@ -179,26 +192,26 @@ const Schools = () => {
                     <div>
                       <p className="font-medium">{school.name}</p>
                       <p className="text-sm text-muted-foreground">
-                        {school.assignedStaff}
+                        {school.assignedStaff ?? school.assigned_staff ?? '—'}
                       </p>
                     </div>
                   </div>
                 </TableCell>
-                <TableCell>{getPlanBadge(school.planType)}</TableCell>
-                <TableCell>{getSubscriptionBadge(school.subscriptionStatus)}</TableCell>
+                <TableCell>{getPlanBadge(school.planType ?? school.subscription_info?.plan_name)}</TableCell>
+                <TableCell>{getSubscriptionBadge(school.subscriptionStatus ?? school.subscription_info?.status ?? (school.is_subscription_active ? 'active' : 'inactive'))}</TableCell>
                 <TableCell className="hidden md:table-cell">
                   <div className="space-y-1.5">
                     <div className="flex items-center justify-between text-sm">
-                      {getOnboardingBadge(school.onboardingStatus)}
+                      {getOnboardingBadge(school.onboardingStatus ?? school.onboarding_status ?? 'not_started')}
                     </div>
-                    <Progress value={school.onboardingProgress} className="h-1.5" />
+                    <Progress value={school.onboardingProgress ?? school.onboarding_progress ?? 0} className="h-1.5" />
                   </div>
                 </TableCell>
                 <TableCell className="hidden lg:table-cell">
-                  {school.studentCount.toLocaleString()}
+                  {(school.studentCount ?? school.student_count ?? 0).toLocaleString()}
                 </TableCell>
                 <TableCell className="hidden lg:table-cell">
-                  {school.teacherCount}
+                  {school.teacherCount ?? school.teacher_count ?? 0}
                 </TableCell>
                 <TableCell>
                   <DropdownMenu>
@@ -208,17 +221,9 @@ const Schools = () => {
                       </Button>
                     </DropdownMenuTrigger>
                     <DropdownMenuContent align="end" className="bg-card">
-                      <DropdownMenuItem>
+                      <DropdownMenuItem onClick={() => navigate(`/schools/${school.id}`)}>
                         <Eye className="mr-2 h-4 w-4" />
                         View Details
-                      </DropdownMenuItem>
-                      <DropdownMenuItem>
-                        <ArrowUpCircle className="mr-2 h-4 w-4" />
-                        Start Upgrade
-                      </DropdownMenuItem>
-                      <DropdownMenuItem>
-                        <MessageSquare className="mr-2 h-4 w-4" />
-                        Support History
                       </DropdownMenuItem>
                     </DropdownMenuContent>
                   </DropdownMenu>
@@ -227,6 +232,23 @@ const Schools = () => {
             ))}
           </TableBody>
         </Table>
+      </div>
+      {/* Summary + Pagination */}
+      <div className="flex items-center justify-between text-sm text-muted-foreground">
+        <p>
+          {pagination.total === 0
+            ? `Showing 0 of 0 schools`
+            : `Showing ${pagination.page * pagination.limit + 1} - ${Math.min((pagination.page + 1) * pagination.limit, pagination.total)} of ${pagination.total} schools`}
+        </p>
+        <div className="flex items-center gap-2">
+          <Button variant="outline" size="sm" onClick={() => setPage(Math.max(0, (pagination.page || 0) - 1))} disabled={(pagination.page || 0) === 0}>
+            Prev
+          </Button>
+          <div className="text-sm text-muted-foreground">Page {(pagination.page || 0) + 1} of {pagination.totalPages || 1}</div>
+          <Button variant="outline" size="sm" onClick={() => setPage(Math.min((pagination.totalPages || 1) - 1, (pagination.page || 0) + 1))} disabled={(pagination.page || 0) >= ((pagination.totalPages || 1) - 1)}>
+            Next
+          </Button>
+        </div>
       </div>
     </div>
   );

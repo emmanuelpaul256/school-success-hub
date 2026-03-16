@@ -2,13 +2,118 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Switch } from '@/components/ui/switch';
 import { Separator } from '@/components/ui/separator';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
-import { currentUser } from '@/data/mockData';
-import { Bell, Lock, User, Mail, Building2, Shield } from 'lucide-react';
+import { useQuery } from '@tanstack/react-query';
+import { otherService } from '@/services';
+import { Lock, User, Building2, Shield } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { useToast } from '@/components/ui/use-toast';
 
 const Settings = () => {
+  const { data: userResp, isLoading: loadingUser } = useQuery({
+    queryKey: ['settings', 'user'],
+    queryFn: async () => {
+      const res: any = await otherService.getAuthProfile();
+      return res?.data || res || {};
+    },
+  });
+
+  const { data: preferencesResp, isLoading: loadingPreferences } = useQuery({
+    queryKey: ['settings', 'preferences'],
+    queryFn: async () => {
+      const res: any = await otherService.getUserPreferences();
+      return res?.data?.preferences || {};
+    },
+  });
+
+  const { data: organizationResp } = useQuery({
+    queryKey: ['settings', 'organization'],
+    queryFn: async () => {
+      const res: any = await otherService.getOrganization();
+      return res?.data?.organization || {};
+    },
+  });
+
+  const currentUser = userResp || {};
+  const preferences = preferencesResp || {};
+  const organization = organizationResp || {};
+
+  const [firstName, setFirstName] = useState('');
+  const [lastName, setLastName] = useState('');
+  const [email, setEmail] = useState('');
+  const [userType, setUserType] = useState('');
+  const [roleState, setRoleState] = useState('');
+  const [phoneNumber, setPhoneNumber] = useState('');
+  const [saving, setSaving] = useState(false);
+  const [oldPassword, setOldPassword] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmNewPassword, setConfirmNewPassword] = useState('');
+  const [changingPassword, setChangingPassword] = useState(false);
+
+  const { toast } = useToast();
+
+  useEffect(() => {
+    if (currentUser) {
+      setFirstName(currentUser.first_name || currentUser.firstName || '');
+      setLastName(currentUser.last_name || currentUser.lastName || '');
+      setEmail(currentUser.email || '');
+      setUserType(currentUser.user_type || currentUser.userType || '');
+      setRoleState(currentUser.role || '');
+      setPhoneNumber(currentUser.phone_number || currentUser.phone || '');
+    }
+  }, [currentUser]);
+
+  const handleSave = async () => {
+    setSaving(true);
+    try {
+      const payload: any = {
+        first_name: firstName,
+        last_name: lastName,
+        phone_number: phoneNumber || null,
+        date_of_birth: null,
+        bio: '',
+        profile_picture: null,
+      };
+
+      await otherService.updateAuthProfile(payload);
+      toast({
+        title: 'Profile updated',
+      });
+    } catch (err: any) {
+      toast({
+        title: err?.message || 'Failed to update profile',
+        variant: 'destructive',
+      });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleChangePassword = async () => {
+    setChangingPassword(true);
+    try {
+      const payload = {
+        old_password: oldPassword,
+        new_password: newPassword,
+        new_password_confirm: confirmNewPassword,
+      };
+      await otherService.changePasswordAuth(payload);
+      toast({
+        title: 'Password changed',
+      });
+      setOldPassword('');
+      setNewPassword('');
+      setConfirmNewPassword('');
+    } catch (err: any) {
+      toast({
+        title: err?.message || 'Failed to change password',
+        variant: 'destructive',
+      });
+    } finally {
+      setChangingPassword(false);
+    }
+  };
   return (
     <div className="space-y-6 max-w-4xl">
       {/* Page header */}
@@ -34,7 +139,7 @@ const Settings = () => {
           <div className="flex items-center gap-6">
             <Avatar className="h-20 w-20">
               <AvatarFallback className="bg-primary text-primary-foreground text-2xl">
-                {currentUser.name.split(' ').map(n => n[0]).join('')}
+                {currentUser.name ? currentUser.name.split(' ').map((n: string) => n[0]).join('') : 'U'}
               </AvatarFallback>
             </Avatar>
             <div>
@@ -49,82 +154,38 @@ const Settings = () => {
 
           <div className="grid gap-4 sm:grid-cols-2">
             <div className="space-y-2">
-              <Label htmlFor="name">Full Name</Label>
-              <Input id="name" defaultValue={currentUser.name} />
+              <Label htmlFor="first-name">First Name</Label>
+              <Input id="first-name" value={firstName} onChange={(e) => setFirstName(e.target.value)} />
             </div>
+            <div className="space-y-2">
+              <Label htmlFor="last-name">Last Name</Label>
+              <Input id="last-name" value={lastName} onChange={(e) => setLastName(e.target.value)} />
+            </div>
+
             <div className="space-y-2">
               <Label htmlFor="email">Email</Label>
-              <Input id="email" type="email" defaultValue={currentUser.email} />
+              <Input id="email" type="email" value={email} disabled />
             </div>
             <div className="space-y-2">
+              <Label htmlFor="user-type">User Type</Label>
+              <Input id="user-type" value={userType} disabled />
+            </div>
+
+            <div className="space-y-2">
               <Label htmlFor="role">Role</Label>
-              <Input id="role" defaultValue={currentUser.role} disabled />
+              <Input id="role" value={roleState} disabled />
             </div>
             <div className="space-y-2">
               <Label htmlFor="phone">Phone Number</Label>
-              <Input id="phone" type="tel" placeholder="+1 555-0123" />
+              <Input id="phone" type="tel" value={phoneNumber} onChange={(e) => setPhoneNumber(e.target.value)} placeholder="+1 555-0123" />
             </div>
           </div>
 
-          <Button>Save Changes</Button>
+          <Button onClick={handleSave} disabled={saving}>{saving ? 'Saving...' : 'Save Changes'}</Button>
         </CardContent>
       </Card>
 
-      {/* Notifications Section */}
-      <Card className="card-elevated">
-        <CardHeader>
-          <div className="flex items-center gap-2">
-            <Bell className="h-5 w-5 text-muted-foreground" />
-            <CardTitle>Notifications</CardTitle>
-          </div>
-          <CardDescription>
-            Configure how you receive notifications
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-6">
-          <div className="space-y-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="font-medium">Email Notifications</p>
-                <p className="text-sm text-muted-foreground">
-                  Receive email updates for important activities
-                </p>
-              </div>
-              <Switch defaultChecked />
-            </div>
-            <Separator />
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="font-medium">Demo Reminders</p>
-                <p className="text-sm text-muted-foreground">
-                  Get reminded 30 minutes before scheduled demos
-                </p>
-              </div>
-              <Switch defaultChecked />
-            </div>
-            <Separator />
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="font-medium">New Lead Alerts</p>
-                <p className="text-sm text-muted-foreground">
-                  Get notified when new leads are assigned to you
-                </p>
-              </div>
-              <Switch defaultChecked />
-            </div>
-            <Separator />
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="font-medium">Follow-up Reminders</p>
-                <p className="text-sm text-muted-foreground">
-                  Get reminded about overdue follow-ups
-                </p>
-              </div>
-              <Switch defaultChecked />
-            </div>
-          </div>
-        </CardContent>
-      </Card>
+      {/* Notifications removed per request (moved into profile area) */}
 
       {/* Security Section */}
       <Card className="card-elevated">
@@ -141,32 +202,22 @@ const Settings = () => {
           <div className="grid gap-4 sm:grid-cols-2">
             <div className="space-y-2">
               <Label htmlFor="current-password">Current Password</Label>
-              <Input id="current-password" type="password" />
+              <Input id="current-password" type="password" value={oldPassword} onChange={(e) => setOldPassword(e.target.value)} />
             </div>
             <div />
             <div className="space-y-2">
               <Label htmlFor="new-password">New Password</Label>
-              <Input id="new-password" type="password" />
+              <Input id="new-password" type="password" value={newPassword} onChange={(e) => setNewPassword(e.target.value)} />
             </div>
             <div className="space-y-2">
               <Label htmlFor="confirm-password">Confirm Password</Label>
-              <Input id="confirm-password" type="password" />
+              <Input id="confirm-password" type="password" value={confirmNewPassword} onChange={(e) => setConfirmNewPassword(e.target.value)} />
             </div>
           </div>
 
-          <Button>Update Password</Button>
+          <Button onClick={handleChangePassword} disabled={changingPassword}>{changingPassword ? 'Changing...' : 'Update Password'}</Button>
 
           <Separator />
-
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="font-medium">Two-Factor Authentication</p>
-              <p className="text-sm text-muted-foreground">
-                Add an extra layer of security to your account
-              </p>
-            </div>
-            <Button variant="outline">Enable 2FA</Button>
-          </div>
         </CardContent>
       </Card>
 
@@ -188,9 +239,9 @@ const Settings = () => {
                 <Shield className="h-6 w-6" />
               </div>
               <div>
-                <p className="font-medium">EduConnect</p>
+                <p className="font-medium">{organization.name || 'EduConnect'}</p>
                 <p className="text-sm text-muted-foreground">
-                  EdTech Sales Platform
+                  {organization.description || 'EdTech Sales Platform'}
                 </p>
               </div>
             </div>
@@ -199,7 +250,7 @@ const Settings = () => {
               <div>
                 <p className="font-medium">Your Role</p>
                 <p className="text-sm text-muted-foreground capitalize">
-                  {currentUser.role}
+                  {currentUser.role || 'User'}
                 </p>
               </div>
               <Button variant="outline" size="sm">

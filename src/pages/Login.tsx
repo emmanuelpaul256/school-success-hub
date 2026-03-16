@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { useNavigate, Navigate } from 'react-router-dom';
+import { useState, useEffect, useCallback } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { GraduationCap, Eye, EyeOff, ArrowRight, BookOpen, Users, BarChart3 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -15,8 +15,16 @@ const Login = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
 
-  // Already logged in → go to dashboard
-  if (isAuthenticated) return <Navigate to="/" replace />;
+  // Redirect if already logged in
+  useEffect(() => {
+    if (isAuthenticated) {
+      // Use setTimeout to avoid navigation during render
+      const timer = setTimeout(() => {
+        navigate('/', { replace: true });
+      }, 0);
+      return () => clearTimeout(timer);
+    }
+  }, [isAuthenticated, navigate]);
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -60,7 +68,7 @@ const Login = () => {
             <GraduationCap className="h-6 w-6 text-white" />
           </div>
           <div>
-            <p className="font-bold text-white text-lg leading-none">EduConnect</p>
+            <p className="font-bold text-white text-lg leading-none">Nibble</p>
             <p className="text-xs" style={{ color: 'hsl(210, 40%, 60%)' }}>Sales Control Center</p>
           </div>
         </div>
